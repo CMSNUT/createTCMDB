@@ -1,0 +1,14 @@
+# R 环境
+.Rproj.user/
+.renv/
+renv/library/
+.Rhistory
+.RData
+.Ruserdata
+
+# 输出文件
+raw_data/
+database/
+
+# 日志文件
+logs/
