@@ -1,7 +1,16 @@
 ---
-title:"BATMAN"
+title: "BATMAN"
+date: "`r format(Sys.Date(), '%Y-%m-%d')`"
 output:
-  github_document
+  html_document:
+    toc: true                  
+    toc_float: true             
+    number_sections: true       
+    theme: cosmo                
+    highlight: tango           
+    code_folding: hide
+    code_btn: true          
+    df_print: paged             
 ---
 
 ```{r setup, include = FALSE}
@@ -12,7 +21,31 @@ knitr::opts_chunk$set(
 )
 ```
 
-```{r import_pkgs}
+
+```{r author-info, echo=FALSE, results='asis'}
+# 定义作者信息
+authors <- list(
+  list(
+    name = "Donghui Xia", 
+    email = "dhaxia@snut.edu.cn",
+    orcid = "0000-0002-2664-7596",
+    affiliation = "School of Chemsitry and Environment Science, Shaanxi University of Technology"
+  )
+  # 添加更多作者...
+)
+
+# 生成纯Markdown格式的作者信息
+for (a in authors) {
+  cat(sprintf("**%s**  \n", a$name))
+  cat(sprintf("%s  \n", a$affiliation))
+  cat(sprintf("📧 [%s](mailto:%s)  \n", a$email, a$email))
+  cat(sprintf("🔗 [ORCID: %s](https://orcid.org/%s)  \n\n", a$orcid, a$orcid))
+}
+```
+
+## Importing R packages
+
+```{r import_pkgs, eval = FALSE}
 # Setup mirroring options
 options(repos = c(CRAN = "https://mirrors.tuna.tsinghua.edu.cn/CRAN/"))
 options(BioC_mirror = "https://mirrors.tuna.tsinghua.edu.cn/bioconductor")
@@ -89,14 +122,14 @@ paste(failed, collapse = ", "))
 rm(required_packages, bioc_packages, loaded_packages)
 ```
 
-## 0. Setting the parent path of files
+## Setting the parent path of files
 ```{r setting_path, eval = FALSE}
 raw_path <- "../raw_data"
 db_path <- "../database"
 
 ```
 
-## 1.Download datasets from BATMAN-TCM
+## Download datasets from BATMAN-TCM
 ```{r download_data, eval = FALSE}
 # Herbs information and their ingredient compounds
 tryCatch(
@@ -138,7 +171,7 @@ tryCatch(
 
 ```
 
-## 2.Reading dataset
+## Reading dataset
 ```{r reading_data, eval = FALSE}
 ##############################
 # Reading formula_herb  ######
@@ -225,7 +258,7 @@ compound_target_predicted_batman <- data.table::fread(
   dplyr::mutate(across(c("probability"), ~ as.numeric(.x) * 1000)) 
 ```
 
-## 3.Saving dataset
+## Saving dataset
 ```{r saving_rawdata, eval = FALSE}
 # 合并靶点数据，Probability=1为已知的成分-靶点数据
 compound_target_batman <- rbind(
@@ -241,12 +274,12 @@ save(
 )
 ```
 
-## 4.Reorganize the dataset
+## Reorganize the dataset
 ```{r standardized_dataset, eval = FALSE}
 
 ```
 
-## 5.Saving dataset
+## Saving dataset
 ```{r saving_db, eval = FALSE}
 save(
   formula_herb_batman,

@@ -1,0 +1,130 @@
+---
+title: "TCMSP"
+date: "`r format(Sys.Date(), '%Y-%m-%d')`"
+output:
+  html_document:
+    toc: true                  
+    toc_float: true             
+    number_sections: true       
+    theme: cosmo                
+    highlight: tango           
+    code_folding: hide
+    code_btn: true          
+    df_print: paged             
+---
+
+```{r setup, include = FALSE}
+knitr::opts_chunk$set(
+  echo = TRUE,
+  warning = FALSE,
+  message = FALSE
+)
+```
+
+
+```{r author-info, echo=FALSE, results='asis'}
+# 定义作者信息
+authors <- list(
+  list(
+    name = "Donghui Xia", 
+    email = "dhaxia@snut.edu.cn",
+    orcid = "0000-0002-2664-7596",
+    affiliation = "School of Chemsitry and Environment Science, Shaanxi University of Technology"
+  )
+  # 添加更多作者...
+)
+
+# 生成纯Markdown格式的作者信息
+for (a in authors) {
+  cat(sprintf("**%s**  \n", a$name))
+  cat(sprintf("%s  \n", a$affiliation))
+  cat(sprintf("📧 [%s](mailto:%s)  \n", a$email, a$email))
+  cat(sprintf("🔗 [ORCID: %s](https://orcid.org/%s)  \n\n", a$orcid, a$orcid))
+}
+```
+
+## Importing R packages
+
+```{r import_pkgs, eval = FALSE}
+# Setup mirroring options
+options(repos = c(CRAN = "https://mirrors.tuna.tsinghua.edu.cn/CRAN/"))
+options(BioC_mirror = "https://mirrors.tuna.tsinghua.edu.cn/bioconductor")
+
+# Define the list of packages that need to be loaded
+required_packages <- c(
+  "httr",
+  "dplyr",
+  "data.table",
+  "stringr",
+  "tidyr",
+  "readxl"
+)
+
+# Silent installation and loading of all packages
+invisible(
+  lapply(required_packages, function(pkg) {
+    # Check if the package has been installed
+    if (!requireNamespace(pkg, quietly = TRUE)) {
+      # Silent installation of CRAN package
+      install.packages(pkg, repos = getOption("repos"), quiet = TRUE)
+    }
+  
+    # Silent loading package
+    suppressPackageStartupMessages(
+      suppressWarnings(
+        library(pkg, character.only = TRUE, quietly = TRUE)
+      )
+    )
+  })
+)
+
+# Bioconductor packages
+bioc_packages <- c()
+if (length(bioc_packages) > 0) {
+  # Check if BiocManager is installed
+  if (!requireNamespace("BiocManager", quietly = TRUE)) {
+    install.packages("BiocManager", quiet = TRUE)
+    suppressPackageStartupMessages(library("BiocManager", quietly = TRUE))
+  }
+
+  # Silent installation and loading of Bioconductor package
+  invisible(
+    lapply(bioc_packages, function(bpkg) {
+      if (!requireNamespace(bpkg, quietly = TRUE)) {
+        BiocManager::install(bpkg,
+        update = FALSE,
+        ask = FALSE,
+        quiet = TRUE)
+      }
+      suppressPackageStartupMessages(
+        suppressWarnings(
+          library(bpkg, character.only = TRUE, quietly = TRUE)
+        )
+      )
+      }
+    )
+  )
+}
+
+# Verify if the package was successfully loaded
+loaded_packages <- sapply(c(required_packages, bioc_packages),
+requireNamespace,
+quietly = TRUE)
+
+# Output packages that failed installation
+if (!all(loaded_packages)) {
+failed <- names(loaded_packages)[!loaded_packages]
+warning("The following packages failed to load: ",
+paste(failed, collapse = ", "))
+}
+
+# Clean up temporary variables
+rm(required_packages, bioc_packages, loaded_packages)
+```
+
+## Setting the parent path of files
+```{r setting_path, eval = FALSE}
+raw_path <- "../raw_data"
+db_path <- "../database"
+
+```
