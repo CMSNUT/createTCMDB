@@ -57,7 +57,10 @@ required_packages <- c(
   "data.table",
   "stringr",
   "tidyr",
-  "readxl"
+  "readxl",
+  "purrr", 
+  "rvest", 
+  "jsonlite"
 )
 
 # Silent installation and loading of all packages
@@ -128,3 +131,206 @@ raw_path <- "../raw_data"
 db_path <- "../database"
 
 ```
+
+## Download datasets from TCMSP-old
+```{r download_data, eval = FALSE}
+#################################
+#  function down_tcmsp_browse()
+#################################
+#' Download tcmsp browse dataset
+#'
+#' @param content is herbs,ingredients,targets,diseases
+#' @return a dataframe
+#' @examples
+#' herbs <- down_tcmsp_browse("herbs")
+down_tcmsp_browse <- function(content){
+  
+  browse_url <- "https://www.tcmsp-e.com/browse.php"
+  
+  # 请求url
+  query_url <- httr::modify_url(
+    url = browse_url,
+    query = list(qc = content)
+  )
+  
+  tryCatch({
+    rvest::read_html(query_url, encoding = 'UTF-8') %>%
+    rvest::html_elements("script") %>%
+    rvest::html_text() %>% 
+    stringr::str_extract_all("data:\\s\\[.*\\]") %>% 
+    .[9] %>% 
+    stringr::str_replace("data:", "") %>%
+    trimws() %>%
+    jsonlite::fromJSON() 
+  }, error = function(e) message(content," dataset: ","Download failed!"))
+}
+
+# herbs
+herbs <- down_tcmsp_browse("herbs") %>%
+    setNames(c("herb_chinese_name", "herb_pinyin_name", "herb_latin_name","herb_chinese_category", "herb_latin_category"))
+
+# compounds
+compounds <- down_tcmsp_browse("ingredients")
+
+# targets
+targets <- down_tcmsp_browse("targets")
+
+# diseases
+diseases <- down_tcmsp_browse("diseases")
+
+save(
+  herbs,
+  compounds,
+  targets,
+  diseases,
+  file = file.path(raw_path,"raw_tcmsp_hctd.RData")
+)
+
+
+#################################
+#  function down_tcmsp_herbs_infos()
+#################################
+down_tcmsp_herbs_infos <- function(herb_latin_name,token) {
+  base_url <- "https://www.tcmsp-e.com/tcmspsearch.php"
+  
+  # query url
+  query_url <- httr::modify_url(
+    url = base_url,
+    query = list(
+      qr = trimws(herb_latin_name),
+      qsr = "herb_en_name",
+      token = token
+    )
+  )
+  
+  herbs_infos <- tryCatch({
+    read_html(query_url, encoding = 'UTF-8') %>%
+    html_elements("script") %>% 
+    html_text() %>% 
+    str_extract_all("data:\\s\\[.*\\]") %>%
+    .[[12]]
+    
+  # herb_compound  
+  herb_compound <- herbs_infos %>%
+    .[1] %>%
+    stringr::str_replace("data:", "") %>%
+    trimws() %>%
+    jsonlite::fromJSON() %>%
+    dplyr::mutate(herb_latin_name = herb_latin_name) %>%  
+    dplyr::relocate(herb_latin_name, .before = 1)  # 将"药材"列移至第一列
+  
+  # compound_target
+  compound_target <- herbs_infos %>%
+    .[2] %>%
+    stringr::str_replace("data:", "") %>%
+    trimws() %>%
+    jsonlite::fromJSON()
+  
+  ## disease_target
+  disease_target <- herbs_infos %>%
+    .[4] %>%
+    stringr::str_replace("data:", "") %>%
+    trimws() %>%
+    jsonlite::fromJSON()
+  
+  return(list(herb_compound,compound_target,disease_target))
+    
+  }, error = function(e) return(character(0)))
+}
+
+token <- dlg_input("输入TCMSP的token(打开TCMSP查询页面获取token)", default = "")$res
+
+
+# Add random fluctuation to base interval
+random_sleep <- function(base_interval) {
+  jitter <- runif(1, -0.1, 0.2)  # ±0.1 s Random fluctuation
+  Sys.sleep(max(0.1, base_interval + jitter))  # Ensure no less than 0.1 second
+}
+
+
+# Traversal herbs list
+total <- length(herbs$herb_latin_name)
+
+hctd_list <- lapply(seq_along(herbs$herb_latin_name), function(i) {
+  name <- herbs$herb_latin_name[i]
+  cat(sprintf("Downloading %d/%d: %s\n", i, total, name))
+  
+  tryCatch({
+    herb_infos <- down_tcmsp_herbs_infos(name, token)
+    return(herb_infos)
+  }, error = function(e) {
+    # Error handling: record failure information
+    warning(paste("Failed for", name, ":", e$message))
+    return(NULL)
+  }, finally = {
+    # Wait whether successful or not
+    Sys.sleep(0.3)
+  })
+})
+
+# Remove failed element (null value)
+hctd_list <- Filter(Negate(is.null), hctd_list)
+save(hctd_list,file = file.path(raw_path,"raw_tcmsp_hctd_list.RData"))
+
+
+# Merge data frames of the same type
+# if (length(hctd_list) > 0) {
+#   herb_compound <- do.call(rbind, lapply(hctd_list, function(x) x[[1]]))
+#   compound_target <- do.call(rbind, lapply(hctd_list, function(x) x[[2]]))
+#   disease_target <- do.call(rbind, lapply(hctd_list, function(x) x[[3]]))
+# }
+
+safe_extract <- function(lst, position) {
+  map_dfr(lst, ~ {
+    if (length(.x) >= position && ncol(.x[[position]]) > 0) {
+      .x[[position]]
+    } else {
+      data.frame()
+    }
+  })
+}
+
+if (length(hctd_list) > 0) {
+  herb_compound <- safe_extract(hctd_list, 1) %>% select(-file_ID)
+  compound_target <- safe_extract(hctd_list, 2)
+  disease_target <- safe_extract(hctd_list, 3)
+} else {
+  # 初始化空数据框
+  herb_compound <- data.frame()
+  compound_target <- data.frame()
+  disease_target <- data.frame()
+}
+
+```
+
+## Saving dataset
+```{r saving_rawdata, eval = FALSE}
+save(
+  herbs,
+  compounds,
+  targets,
+  diseases,
+  herb_compound,
+  compound_target,
+  disease_target,
+  file = file.path(raw_path,"raw_tcmsp.RData")
+)
+```
+
+
+## loading dataset
+```{r reading_data, eval = FALSE}
+```
+
+
+## Reorganize the dataset
+```{r standardized_dataset, eval = FALSE}
+
+```
+
+## Saving dataset
+```{r saving_db, eval = FALSE}
+```
+
+
+
