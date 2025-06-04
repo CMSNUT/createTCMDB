@@ -1,14 +1,14 @@
 ---
-title: "BATMAN"
-output: github_document
+title:"BATMAN"
+output:
+  github_document
 ---
 
-
-```{r setup, include=FALSE}
+```{r setup, include = FALSE}
 knitr::opts_chunk$set(
-  echo = TRUE, #
-  warning=FALSE, 
-  message=FALSE 
+  echo = TRUE,
+  warning = FALSE,
+  message = FALSE
 )
 ```
 
@@ -20,12 +20,12 @@ options(BioC_mirror = "https://mirrors.tuna.tsinghua.edu.cn/bioconductor")
 # Define the list of packages that need to be loaded
 required_packages <- c(
   "httr",
-  "dplyr", 
-  "data.table", 
-  "stringr", 
-  "tidyr", 
+  "dplyr",
+  "data.table",
+  "stringr",
+  "tidyr",
   "readxl"
-  )
+)
 
 # Silent installation and loading of all packages
 invisible(
@@ -35,7 +35,7 @@ invisible(
       # Silent installation of CRAN package
       install.packages(pkg, repos = getOption("repos"), quiet = TRUE)
     }
-    
+  
     # Silent loading package
     suppressPackageStartupMessages(
       suppressWarnings(
@@ -46,46 +46,214 @@ invisible(
 )
 
 # Bioconductor packages
-bioc_packages <- c("DESeq2", "ComplexHeatmap")
+bioc_packages <- c()
 if (length(bioc_packages) > 0) {
   # Check if BiocManager is installed
   if (!requireNamespace("BiocManager", quietly = TRUE)) {
     install.packages("BiocManager", quiet = TRUE)
     suppressPackageStartupMessages(library("BiocManager", quietly = TRUE))
   }
-  
+
   # Silent installation and loading of Bioconductor package
   invisible(
     lapply(bioc_packages, function(bpkg) {
       if (!requireNamespace(bpkg, quietly = TRUE)) {
-        BiocManager::install(bpkg, update = FALSE, ask = FALSE, quiet = TRUE)
+        BiocManager::install(bpkg,
+        update = FALSE,
+        ask = FALSE,
+        quiet = TRUE)
       }
       suppressPackageStartupMessages(
         suppressWarnings(
           library(bpkg, character.only = TRUE, quietly = TRUE)
         )
       )
-    })
+      }
+    )
   )
 }
 
 # Verify if the package was successfully loaded
-loaded_packages <- sapply(c(required_packages, bioc_packages), 
-                          requireNamespace, quietly = TRUE)
+loaded_packages <- sapply(c(required_packages, bioc_packages),
+requireNamespace,
+quietly = TRUE)
 
 # Output packages that failed installation
 if (!all(loaded_packages)) {
-  failed <- names(loaded_packages)[!loaded_packages]
-  warning("The following packages failed to load: ", paste(failed, collapse = ", "))
+failed <- names(loaded_packages)[!loaded_packages]
+warning("The following packages failed to load: ",
+paste(failed, collapse = ", "))
 }
 
 # Clean up temporary variables
 rm(required_packages, bioc_packages, loaded_packages)
 ```
 
-## Download datasets from BATMAN-TCM
-```{r eval=FALSE}
+## 0. Setting the parent path of files
+```{r setting_path, eval = FALSE}
+raw_path <- "../raw_data"
+db_path <- "../database"
 
 ```
 
+## 1.Download datasets from BATMAN-TCM
+```{r download_data, eval = FALSE}
+# Herbs information and their ingredient compounds
+tryCatch(
+  download.file(
+    url = "http://batman2.cloudna.cn/downloadApiFile/data/browser/herb_browse.txt",
+    destfile = file.path(raw_path,"batman/herb_compound.txt")
+  ),
+  error = function(e) message("Herbs information and their ingredient compounds: ", "Download failed!")
+)
 
+# Formulas information and their herbal components
+tryCatch(
+  download.file(
+    url = "http://batman2.cloudna.cn/downloadApiFile/data/browser/formula_browse.txt",
+    destfile = file.path(raw_path,"batman/formula_herb.txt")
+  ),
+  error = function(e) message("Formulas information and their herbal components: ","Download failed!")
+)
+
+# Target proteins information and their TCM ingredient compounds
+## known TTIs 
+tryCatch(
+  download.file(
+    url = "http://batman2.cloudna.cn/downloadApiFile/data/browser/known_browse_by_targets.txt.gz",
+    destfile = file.path(raw_path,"batman/target_compound_known.txt.gz")
+  ),
+  error = function(e) message("Known target proteins information and their TCM ingredient compounds: ","Download failed!")
+)
+
+
+## predicted TTIs
+tryCatch(
+  download.file(
+    url = "http://batman2.cloudna.cn/downloadApiFile/data/browser/predicted__browse_by_targets.txt.gz",
+    destfile = file.path(raw_path,"batman/target_compound_predicted.txt.gz")
+  ),
+  error = function(e) message("Predicted target proteins information and their TCM ingredient compounds: ","Download failed!")
+)
+
+```
+
+## 2.Reading dataset
+```{r reading_data, eval = FALSE}
+##############################
+# Reading formula_herb  ######
+##############################
+formula_herb_batman <- data.table::fread(
+  file.path(raw_path, "batman", "formula_herb.txt"),
+  header = TRUE,
+  sep = "\t",
+  fill = TRUE
+) %>%
+  data.table::setnames(c(
+    "formula_pinyin_mame",
+    "formula_chinese_name",
+    "herb_pinyin_name"
+  )) %>%
+  tidyr::separate_rows(herb_pinyin_name, sep = "\\,") %>%
+  dplyr::filter(!is.na(herb_pinyin_name)) # 删除没有药材信息的方剂记录
+
+##############################
+# Reading herb_compound  #####
+##############################
+herb_compound_batman <- data.table::fread(
+  file.path(raw_path, "batman", "herb_compound.txt"),
+  header = TRUE,
+  sep = "\t",
+  fill = TRUE
+) %>%
+  data.table::setnames(
+    c(
+      "herb_pinyin_name",
+      "herb_chinese_name",
+      "herb_english_name",
+      "herb_latin_name",
+      "IUPAC_name"
+    )
+  ) %>%
+  tidyr::separate_rows(IUPAC_name, sep = "\\|") %>%
+  tidyr::separate(
+    IUPAC_name,
+    # 要拆分的列名
+    into = c("IUPAC_name", "pubchem_cid"),
+    # 新生成的列名
+    sep = "\\((?=[^\\(]*$)",
+    # 正则表达式：匹配最后一个左括号
+    remove = TRUE,
+    # 删除原列（保留新生成的列）
+    
+    fill = "right"            # 若没有括号，右侧列填充NA
+  ) %>%
+  dplyr::mutate(pubchem_cid = gsub("\\)", "", pubchem_cid))  # 删除右括
+
+##############################
+# Reading target_compound_known  
+##############################
+compound_target_known_batman <- data.table::fread(
+  file.path(raw_path, "batman", "target_compound_known.txt.gz"),
+  header = TRUE,
+  sep = "\t",
+  fill = TRUE
+) %>%
+  dplyr::rename(pubchem_cid = PubChem_CIDs) %>%
+  tidyr::separate_rows(pubchem_cid, sep = "\\|") %>%
+  dplyr::mutate(probability=1000)
+
+##############################
+# Reading target_compound_predicted  
+##############################
+compound_target_predicted_batman <- data.table::fread(
+  file.path(raw_path, "batman", "target_compound_predicted.txt.gz"),
+  header = TRUE,
+  sep = "\t" ,
+  fill = TRUE
+) %>%
+  dplyr::rename(pubchem_cid = PubChem_CIDs) %>%
+  tidyr::separate_rows(pubchem_cid, sep = "\\|") %>%
+  tidyr::separate(
+    pubchem_cid,    # 要拆分的列名
+    into = c("pubchem_cid", "probability"),    # 新生成的列名
+    sep = "\\((?=[^\\(]*$)",    # 正则表达式：匹配最后一个左括号
+    remove = TRUE,    # 删除原列（保留新生成的列）
+    fill = "right"            # 若没有括号，右侧列填充NA
+  ) %>%
+  dplyr::mutate(probability = gsub("\\)", "", probability)) %>%  # 删除右括号
+  dplyr::mutate(across(c("probability"), ~ as.numeric(.x) * 1000)) 
+```
+
+## 3.Saving dataset
+```{r saving_rawdata, eval = FALSE}
+# 合并靶点数据，Probability=1为已知的成分-靶点数据
+compound_target_batman <- rbind(
+  compound_target_known_batman,
+  compound_target_predicted_batman
+)
+
+save(
+  formula_herb_batman,
+  herb_compound_batman,
+  compound_target_batman,
+  file = file.path(db_path, "raw_bataman.RData")
+)
+```
+
+## 4.Reorganize the dataset
+```{r standardized_dataset, eval = FALSE}
+
+```
+
+## 5.Saving dataset
+```{r saving_db, eval = FALSE}
+save(
+  formula_herb_batman,
+  herb_compound_batman,
+  compound_target_batman,
+  file = file.path(db_path, "db_bataman.RData")
+)
+
+# load("../database/raw_bataman.RData")
+```

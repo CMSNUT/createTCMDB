@@ -15,7 +15,8 @@ cran_pkgs <- c(
   "openxlsx", 
   "PubChemR", 
   "rmarkdown", 
-  "knitr"
+  "knitr",
+  "R.utils"
 )
 new_cran_pkgs <- cran_pkgs[!cran_pkgs %in% installed.packages()[, "Package"]]
 install.packages(
@@ -76,6 +77,7 @@ writeLines(c(
 # 添加所有文件并提交
 gert::git_add(".")
 gert::git_commit("Initial commit: Project setup with renv")
+# gert::git_push()
 
 # 创建主分支
 if (!"main" %in% gert::git_branch_list()$name) {
