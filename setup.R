@@ -84,3 +84,11 @@ if (!"main" %in% gert::git_branch_list()$name) {
 
 # 首次推送
 usethis::use_github()  # 创建远程仓库，并推送
+
+
+# # 恢复包环境
+# renv::restore()
+# 
+# # 确认安装完成
+# renv::status()
+
